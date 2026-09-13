@@ -8,6 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   *{box-sizing:border-box}
   body{font-family:'Segoe UI',Arial,sans-serif;background:#eceff1;margin:0;padding:0;color:#212121}
@@ -72,6 +73,28 @@
         border-radius:8px;font-size:16px;font-weight:bold}
   .submitbtn:disabled{background:#aaa}
   #saleMsg{font-size:13px;margin-top:8px;min-height:16px;text-align:center}
+  #warnBox{background:#fff3e0;color:#e65100;border-radius:8px;padding:10px;font-size:12px;margin-top:8px}
+
+  /* ── Receipt (after save) ── */
+  #receiptOverlay{display:none;position:fixed;inset:0;background:#eceff1;z-index:20;overflow:auto}
+  #receiptBox{max-width:380px;margin:0 auto;padding:16px}
+  #receiptBox .rhead{text-align:center;margin-bottom:10px}
+  #receiptBox .rhead h2{margin:0;color:#1a237e;font-size:18px}
+  #receiptBox .rhead div{font-size:11px;color:#757575}
+  #receiptBox table{width:100%;border-collapse:collapse;margin:10px 0}
+  #receiptBox th,#receiptBox td{padding:6px 4px;font-size:12px;text-align:left;border-bottom:1px solid #eee}
+  #receiptBox .rtotal{text-align:right;font-size:16px;font-weight:bold;color:#1a237e;margin-top:6px}
+  #receiptBox .ractions{display:flex;gap:8px;margin-top:16px}
+  #receiptBox .ractions button{flex:1;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:bold}
+  #btnPrint{background:#1a237e;color:#fff}
+  #btnWA{background:#25d366;color:#fff}
+  #btnCloseReceipt{background:#e0e0e0;color:#333;width:100%;margin-top:8px;padding:11px;border:none;border-radius:8px}
+  @media print{
+    body *{visibility:hidden}
+    #receiptBox,#receiptBox *{visibility:visible}
+    #receiptBox{position:absolute;left:0;top:0;width:100%}
+    .ractions,#btnCloseReceipt{display:none}
+  }
 </style>
 </head>
 <body>
@@ -142,6 +165,9 @@
           <option>UPI</option>
           <option>Bank</option>
         </select>
+
+        <label>Customer Mobile (WhatsApp share ke liye, optional)</label>
+        <input id="saleMobile" type="tel" placeholder="98xxxxxxxx">
       </div>
 
       <div id="itemRows"></div>
@@ -155,6 +181,7 @@
 
       <button class="submitbtn" id="submitBtn" onclick="submitSale()">Bill Save Karo</button>
       <div id="saleMsg"></div>
+      <div id="warnBox" style="display:none"></div>
     </div>
   </div>
 
@@ -164,12 +191,38 @@
   </div>
 </div>
 
+<!-- ══════ Receipt overlay (after save — Print / WhatsApp) ══════ -->
+<div id="receiptOverlay">
+  <div id="receiptBox">
+    <div class="rhead">
+      <h2 id="r_company">Bilnova AI</h2>
+      <div id="r_companySub"></div>
+      <div style="margin-top:8px;font-size:13px;color:#212121">
+        <b id="r_billType"></b> — Bill #<span id="r_billNo"></span><br>
+        <span id="r_date"></span> | Party: <span id="r_party"></span>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amt</th></tr></thead>
+      <tbody id="r_items"></tbody>
+    </table>
+    <div class="rtotal">Total: <span id="r_total"></span></div>
+    <div class="ractions">
+      <button id="btnPrint" onclick="savePDF()">💾 Save PDF</button>
+      <button id="btnWA" onclick="shareWhatsApp()">💬 WhatsApp</button>
+    </div>
+    <button id="btnCloseReceipt" onclick="closeReceipt()">Band Karo</button>
+  </div>
+</div>
+
 <script>
 const SERVER_KEY = 'bilnova_server';
 const PIN_KEY = 'bilnova_pin_v2';
 let ITEMS_CACHE = [];
+let COMPANY_INFO = {name: 'Bilnova AI'};
 let billType = 'SALE';
 let rowSeq = 0;
+let LAST_RECEIPT = null;
 
 function normalizeServer(v){
   v = v.trim();
@@ -242,8 +295,21 @@ function refresh(){
 function showDashboard(){
   document.getElementById('setup').style.display = 'none';
   document.getElementById('dashPage').style.display = 'block';
+  loadCompanyInfo();
   refresh();
   setInterval(refresh, 30000);
+}
+
+function loadCompanyInfo(){
+  const server = localStorage.getItem(SERVER_KEY);
+  const pin = localStorage.getItem(PIN_KEY) || '';
+  fetch(server + '/api/company?pin=' + encodeURIComponent(pin)).then(r=>r.json()).then(d=>{
+    COMPANY_INFO = d;
+    document.getElementById('headerTitle').innerText = d.name || 'Bilnova AI';
+    document.getElementById('r_company').innerText = d.name || 'Bilnova AI';
+    document.getElementById('r_companySub').innerText =
+      [d.address, d.gstin ? ('GSTIN: '+d.gstin) : '', d.phone].filter(Boolean).join(' | ');
+  }).catch(()=>{});
 }
 
 /* ══════ New Sale logic ══════ */
@@ -329,8 +395,11 @@ function submitSale(){
     items: items
   };
   const btn = document.getElementById('submitBtn');
+  const partyName = payload.party;
+  const mobile = document.getElementById('saleMobile').value.trim();
   btn.disabled = true;
   document.getElementById('saleMsg').innerText = 'Save ho raha hai...';
+  document.getElementById('warnBox').style.display = 'none';
   fetch(server + '/api/create_sale?pin=' + encodeURIComponent(pin), {
     method: 'POST', mode: 'cors',
     headers: {'Content-Type': 'application/json'},
@@ -339,9 +408,19 @@ function submitSale(){
     btn.disabled = false;
     if(d.ok){
       document.getElementById('saleMsg').innerHTML = `✅ Bill #${d.bill_no} saved (₹${d.total})`;
+      if(d.warnings && d.warnings.length){
+        const wb = document.getElementById('warnBox');
+        wb.style.display = 'block';
+        wb.innerHTML = '⚠️ ' + d.warnings.join('<br>⚠️ ');
+      }
+      LAST_RECEIPT = {billNo: d.bill_no, billType: billType, total: d.total,
+                       party: partyName, mobile: mobile, items: items,
+                       date: new Date().toLocaleDateString('en-IN')};
+      showReceipt();
       document.getElementById('itemRows').innerHTML = '';
       addItemRow();
       document.getElementById('saleParty').value = 'Cash';
+      document.getElementById('saleMobile').value = '';
       refresh();
     } else {
       document.getElementById('saleMsg').innerText = '❌ ' + (d.error || 'Save nahi hua');
@@ -350,6 +429,73 @@ function submitSale(){
     btn.disabled = false;
     document.getElementById('saleMsg').innerText = '❌ Connection error — PC/WiFi check karo.';
   });
+}
+
+function showReceipt(){
+  if(!LAST_RECEIPT) return;
+  const r = LAST_RECEIPT;
+  document.getElementById('r_billType').innerText = r.billType==='KACCHA' ? 'KACCHA SLIP' : 'TAX INVOICE';
+  document.getElementById('r_billNo').innerText = r.billNo;
+  document.getElementById('r_date').innerText = r.date;
+  document.getElementById('r_party').innerText = r.party;
+  document.getElementById('r_total').innerText = fmt(r.total);
+  document.getElementById('r_items').innerHTML = r.items.map(i=>{
+    const amt = i.qty * i.rate;
+    return `<tr><td>${i.name}</td><td>${i.qty}</td><td>${fmt(i.rate)}</td><td>${fmt(amt)}</td></tr>`;
+  }).join('');
+  document.getElementById('receiptOverlay').style.display = 'block';
+}
+
+function closeReceipt(){
+  document.getElementById('receiptOverlay').style.display = 'none';
+}
+
+function savePDF(){
+  if(!LAST_RECEIPT || !window.jspdf) return;
+  const r = LAST_RECEIPT;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'mm', format:[80, 150 + r.items.length*6]});  // thermal-ish width
+  let y = 8;
+  doc.setFontSize(13); doc.setFont(undefined,'bold');
+  doc.text(COMPANY_INFO.name || 'Bilnova AI', 40, y, {align:'center'}); y += 5;
+  doc.setFontSize(8); doc.setFont(undefined,'normal');
+  const sub = [COMPANY_INFO.address, COMPANY_INFO.gstin ? ('GSTIN: '+COMPANY_INFO.gstin) : '', COMPANY_INFO.phone]
+              .filter(Boolean).join(' | ');
+  if(sub){ doc.text(sub, 40, y, {align:'center', maxWidth:76}); y += 6; }
+  doc.setLineWidth(0.2); doc.line(4, y, 76, y); y += 5;
+  doc.setFontSize(9);
+  doc.text((r.billType==='KACCHA' ? 'KACCHA SLIP' : 'TAX INVOICE') + '  #' + r.billNo, 4, y); y += 5;
+  doc.text('Date: ' + r.date, 4, y); y += 5;
+  doc.text('Party: ' + r.party, 4, y); y += 6;
+  doc.line(4, y, 76, y); y += 5;
+  doc.setFontSize(8); doc.setFont(undefined,'bold');
+  doc.text('Item', 4, y); doc.text('Qty', 44, y); doc.text('Rate', 55, y); doc.text('Amt', 68, y); y += 4;
+  doc.setFont(undefined,'normal');
+  r.items.forEach(i=>{
+    const amt = i.qty * i.rate;
+    doc.text(String(i.name).slice(0,20), 4, y);
+    doc.text(String(i.qty), 44, y);
+    doc.text(i.rate.toFixed(0), 55, y);
+    doc.text(amt.toFixed(0), 68, y);
+    y += 5;
+  });
+  y += 2; doc.line(4, y, 76, y); y += 6;
+  doc.setFontSize(11); doc.setFont(undefined,'bold');
+  doc.text('Total: ' + fmt(r.total), 76, y, {align:'right'});
+  doc.save(`Bill_${r.billNo}.pdf`);
+}
+
+function shareWhatsApp(){
+  if(!LAST_RECEIPT) return;
+  const r = LAST_RECEIPT;
+  let msg = `*${COMPANY_INFO.name || 'Bilnova AI'}*\n`;
+  msg += `${r.billType==='KACCHA' ? 'Kaccha Slip' : 'Tax Invoice'} #${r.billNo} | ${r.date}\n`;
+  msg += `Party: ${r.party}\n\n`;
+  r.items.forEach(i=>{ msg += `${i.name} x${i.qty} @ ${i.rate} = ₹${(i.qty*i.rate).toFixed(0)}\n`; });
+  msg += `\n*Total: ${fmt(r.total)}*`;
+  const phone = r.mobile ? ('91' + r.mobile.replace(/\D/g,'').slice(-10)) : '';
+  const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
 }
 
 /* App khulte hi — agar pehle se koi server saved hai to seedha dashboard */
