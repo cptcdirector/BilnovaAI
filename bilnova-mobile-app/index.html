@@ -40,6 +40,38 @@
   #setup .hint{font-size:11px;color:#999;margin-top:10px;text-align:left;line-height:1.5}
   #err{color:#c62828;font-size:12px;margin-top:10px;min-height:16px}
   #loading{text-align:center;padding:60px 16px;color:#757575}
+
+  /* ── Bottom tab bar ── */
+  .tabbar{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;
+          box-shadow:0 -1px 6px rgba(0,0,0,.15);z-index:10}
+  .tabbar button{flex:1;background:none;border:none;padding:10px 4px;font-size:12px;color:#757575}
+  .tabbar button.active{color:#1a237e;font-weight:bold}
+  .page{display:none;padding-bottom:70px}
+  .page.active{display:block}
+
+  /* ── New Sale form ── */
+  .formcard{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px}
+  .formcard label{display:block;font-size:12px;color:#555;margin:8px 0 4px}
+  .formcard input,.formcard select{font-size:15px;padding:9px;width:100%;
+        border:2px solid #c5cae9;border-radius:8px}
+  .toggle2{display:flex;gap:8px;margin-top:6px}
+  .toggle2 button{flex:1;padding:10px;border-radius:8px;border:2px solid #c5cae9;
+        background:#fff;font-size:14px;font-weight:bold;color:#555}
+  .toggle2 button.on{background:#1a237e;color:#fff;border-color:#1a237e}
+  .itemrow{border:1px solid #e0e0e0;border-radius:8px;padding:10px;margin-bottom:8px;position:relative}
+  .itemrow .rm{position:absolute;top:6px;right:6px;background:#ffebee;color:#c62828;
+        border:none;border-radius:6px;width:26px;height:26px;font-size:14px}
+  .rowgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+  .additem{width:100%;padding:11px;background:#e8eaf6;color:#1a237e;border:none;
+        border-radius:8px;font-size:14px;font-weight:bold;margin:6px 0 14px}
+  .totalbox{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px}
+  .totalbox .row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
+  .totalbox .row.grand{font-size:18px;font-weight:bold;color:#1a237e;border-top:1px solid #eee;
+        margin-top:6px;padding-top:8px}
+  .submitbtn{width:100%;padding:14px;background:#2e7d32;color:#fff;border:none;
+        border-radius:8px;font-size:16px;font-weight:bold}
+  .submitbtn:disabled{background:#aaa}
+  #saleMsg{font-size:13px;margin-top:8px;min-height:16px;text-align:center}
 </style>
 </head>
 <body>
@@ -66,36 +98,78 @@
   </div>
 </div>
 
-<!-- ══════ Dashboard (after connect) ══════ -->
+<!-- ══════ Main app (after connect) ══════ -->
 <div id="dashPage" style="display:none">
   <header>
     <img src="icons/icon-192.png" alt="">
-    <h1>Bilnova AI</h1>
+    <h1 id="headerTitle">Bilnova AI</h1>
     <button onclick="changeServer()">Server Badlo</button>
   </header>
-  <div class="wrap">
-    <div class="sub" id="asof">Loading...</div>
-    <div class="grid">
-      <div class="card"><div class="lbl">Today's Sale</div><div class="val green" id="s_sale">—</div></div>
-      <div class="card"><div class="lbl">Today's Purchase</div><div class="val blue" id="s_purch">—</div></div>
-      <div class="card"><div class="lbl">Outstanding</div><div class="val orange" id="s_out">—</div></div>
-      <div class="card"><div class="lbl">Stock Value</div><div class="val" id="s_stock">—</div></div>
-      <div class="card"><div class="lbl">Total Items</div><div class="val" id="s_items">—</div></div>
-      <div class="card"><div class="lbl">Total Parties</div><div class="val" id="s_parties">—</div></div>
+
+  <!-- Dashboard tab -->
+  <div class="page active" id="page-dash">
+    <div class="wrap">
+      <div class="sub" id="asof">Loading...</div>
+      <div class="grid">
+        <div class="card"><div class="lbl">Today's Sale</div><div class="val green" id="s_sale">—</div></div>
+        <div class="card"><div class="lbl">Today's Purchase</div><div class="val blue" id="s_purch">—</div></div>
+        <div class="card"><div class="lbl">Outstanding</div><div class="val orange" id="s_out">—</div></div>
+        <div class="card"><div class="lbl">Stock Value</div><div class="val" id="s_stock">—</div></div>
+        <div class="card"><div class="lbl">Total Items</div><div class="val" id="s_items">—</div></div>
+        <div class="card"><div class="lbl">Total Parties</div><div class="val" id="s_parties">—</div></div>
+      </div>
+      <table><thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Amount</th></tr></thead>
+      <tbody id="recent"></tbody></table>
     </div>
-    <table><thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Amount</th></tr></thead>
-    <tbody id="recent"></tbody></table>
+  </div>
+
+  <!-- New Sale tab -->
+  <div class="page" id="page-sale">
+    <div class="wrap">
+      <div class="formcard">
+        <label>Party / Customer</label>
+        <input id="saleParty" type="text" value="Cash" placeholder="Cash">
+
+        <label>Bill Type</label>
+        <div class="toggle2">
+          <button id="btnPakka" class="on" onclick="setBillType('SALE')">Pakka (GST Bill)</button>
+          <button id="btnKaccha" onclick="setBillType('KACCHA')">Kaccha (Slip)</button>
+        </div>
+
+        <label>Payment Mode</label>
+        <select id="salePayMode">
+          <option>Cash</option>
+          <option>UPI</option>
+          <option>Bank</option>
+        </select>
+      </div>
+
+      <div id="itemRows"></div>
+      <button class="additem" onclick="addItemRow()">+ Item Jodo</button>
+
+      <div class="totalbox">
+        <div class="row"><span>Subtotal</span><span id="t_sub">₹0</span></div>
+        <div class="row" id="t_gst_row"><span>GST</span><span id="t_gst">₹0</span></div>
+        <div class="row grand"><span>Total</span><span id="t_total">₹0</span></div>
+      </div>
+
+      <button class="submitbtn" id="submitBtn" onclick="submitSale()">Bill Save Karo</button>
+      <div id="saleMsg"></div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <button id="tabBtnDash" class="active" onclick="showPage('dash')">📊 Dashboard</button>
+    <button id="tabBtnSale" onclick="showPage('sale')">🧾 New Sale</button>
   </div>
 </div>
 
 <script>
-// NEW 13-Sep-2026 (Rakesh — confirmed requested: "Play Store pe nahi,
-// direct client ko di jaaye" — ye PWA shell KISI EK PC ke IP se bandhi
-// nahi hai. Har phone apna server-address khud "Connect" screen mein
-// daalta hai [localStorage mein save hota hai], isliye EK HI APK sab
-// clients ko de sakte ho — bas har ek apne shop ka IP:port daalega.
 const SERVER_KEY = 'bilnova_server';
 const PIN_KEY = 'bilnova_pin_v2';
+let ITEMS_CACHE = [];
+let billType = 'SALE';
+let rowSeq = 0;
 
 function normalizeServer(v){
   v = v.trim();
@@ -137,6 +211,14 @@ function changeServer(){
 
 function fmt(n){ return '₹' + Number(n).toLocaleString('en-IN', {maximumFractionDigits:0}); }
 
+function showPage(name){
+  document.getElementById('page-dash').classList.toggle('active', name==='dash');
+  document.getElementById('page-sale').classList.toggle('active', name==='sale');
+  document.getElementById('tabBtnDash').classList.toggle('active', name==='dash');
+  document.getElementById('tabBtnSale').classList.toggle('active', name==='sale');
+  if(name==='sale' && ITEMS_CACHE.length===0) loadItems();
+}
+
 function refresh(){
   const server = localStorage.getItem(SERVER_KEY);
   const pin = localStorage.getItem(PIN_KEY) || '';
@@ -164,11 +246,116 @@ function showDashboard(){
   setInterval(refresh, 30000);
 }
 
-// App khulte hi — agar pehle se koi server saved hai to seedha dashboard
+/* ══════ New Sale logic ══════ */
+function setBillType(t){
+  billType = t;
+  document.getElementById('btnPakka').classList.toggle('on', t==='SALE');
+  document.getElementById('btnKaccha').classList.toggle('on', t==='KACCHA');
+  document.getElementById('t_gst_row').style.display = (t==='KACCHA') ? 'none' : 'flex';
+  computeTotals();
+}
+
+function loadItems(){
+  const server = localStorage.getItem(SERVER_KEY);
+  const pin = localStorage.getItem(PIN_KEY) || '';
+  fetch(server + '/api/items?pin=' + encodeURIComponent(pin)).then(r=>r.json()).then(rows=>{
+    ITEMS_CACHE = rows;
+    if(document.getElementById('itemRows').children.length===0) addItemRow();
+  }).catch(()=>{ document.getElementById('saleMsg').innerText = '⚠️ Item list load nahi hui.'; });
+}
+
+function addItemRow(){
+  rowSeq++;
+  const id = 'row'+rowSeq;
+  const div = document.createElement('div');
+  div.className = 'itemrow';
+  div.id = id;
+  const opts = ITEMS_CACHE.map(it => `<option value="${it.name}">${it.name} (Stock: ${it.stock})</option>`).join('');
+  div.innerHTML = `
+    <button class="rm" onclick="document.getElementById('${id}').remove(); computeTotals();">✕</button>
+    <label>Item</label>
+    <select onchange="itemPicked('${id}', this.value)">
+      <option value="">-- Select Item --</option>${opts}
+    </select>
+    <div class="rowgrid">
+      <div><label>Qty</label><input type="number" step="any" value="1" oninput="computeTotals()" id="${id}_qty"></div>
+      <div><label>Rate</label><input type="number" step="any" value="0" oninput="computeTotals()" id="${id}_rate"></div>
+    </div>`;
+  document.getElementById('itemRows').appendChild(div);
+  computeTotals();
+}
+
+function itemPicked(id, name){
+  const it = ITEMS_CACHE.find(x=>x.name===name);
+  if(it){ document.getElementById(id+'_rate').value = it.rate; }
+  computeTotals();
+}
+
+function collectItems(){
+  const rows = document.querySelectorAll('.itemrow');
+  const items = [];
+  rows.forEach(r=>{
+    const sel = r.querySelector('select');
+    const qty = parseFloat(document.getElementById(r.id+'_qty').value) || 0;
+    const rate = parseFloat(document.getElementById(r.id+'_rate').value) || 0;
+    if(sel.value && qty>0){ items.push({name: sel.value, qty, rate}); }
+  });
+  return items;
+}
+
+function computeTotals(){
+  const items = collectItems();
+  let sub = 0, gst = 0;
+  items.forEach(i=>{
+    const it = ITEMS_CACHE.find(x=>x.name===i.name);
+    const basic = i.qty * i.rate;
+    sub += basic;
+    if(billType==='SALE' && it){ gst += basic * (it.gst||0) / 100; }
+  });
+  document.getElementById('t_sub').innerText = fmt(sub);
+  document.getElementById('t_gst').innerText = fmt(gst);
+  document.getElementById('t_total').innerText = fmt(sub+gst);
+}
+
+function submitSale(){
+  const items = collectItems();
+  if(items.length===0){ document.getElementById('saleMsg').innerText = '⚠️ Kam se kam ek item chuno.'; return; }
+  const server = localStorage.getItem(SERVER_KEY);
+  const pin = localStorage.getItem(PIN_KEY) || '';
+  const payload = {
+    bill_type: billType,
+    party: document.getElementById('saleParty').value || 'Cash',
+    payment_mode: document.getElementById('salePayMode').value,
+    items: items
+  };
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  document.getElementById('saleMsg').innerText = 'Save ho raha hai...';
+  fetch(server + '/api/create_sale?pin=' + encodeURIComponent(pin), {
+    method: 'POST', mode: 'cors',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  }).then(r=>r.json()).then(d=>{
+    btn.disabled = false;
+    if(d.ok){
+      document.getElementById('saleMsg').innerHTML = `✅ Bill #${d.bill_no} saved (₹${d.total})`;
+      document.getElementById('itemRows').innerHTML = '';
+      addItemRow();
+      document.getElementById('saleParty').value = 'Cash';
+      refresh();
+    } else {
+      document.getElementById('saleMsg').innerText = '❌ ' + (d.error || 'Save nahi hua');
+    }
+  }).catch(ex=>{
+    btn.disabled = false;
+    document.getElementById('saleMsg').innerText = '❌ Connection error — PC/WiFi check karo.';
+  });
+}
+
+/* App khulte hi — agar pehle se koi server saved hai to seedha dashboard */
 const savedServer = localStorage.getItem(SERVER_KEY);
 if(savedServer){ showDashboard(); }
 
-// Service worker register (installability ke liye zaroori)
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
