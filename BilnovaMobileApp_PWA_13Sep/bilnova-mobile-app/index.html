@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#1a237e">
+<title>Bilnova AI</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  *{box-sizing:border-box}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#eceff1;margin:0;padding:0;color:#212121}
+  header{background:#1a237e;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;
+         position:sticky;top:0;z-index:10}
+  header img{width:28px;height:28px;border-radius:50%}
+  header h1{font-size:17px;margin:0;flex:1}
+  header button{background:transparent;border:1px solid rgba(255,255,255,.4);color:#fff;
+                border-radius:6px;padding:5px 10px;font-size:12px}
+  .wrap{padding:14px}
+  .sub{color:#757575;font-size:12px;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .card{background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+  .card .lbl{color:#757575;font-size:12px}
+  .card .val{font-size:19px;font-weight:bold;margin-top:4px}
+  .green{color:#1b5e20}.red{color:#c62828}.blue{color:#0d47a1}.orange{color:#e65100}
+  table{width:100%;border-collapse:collapse;margin-top:16px;background:#fff;border-radius:8px;overflow:hidden}
+  th{background:#1a237e;color:#fff;padding:8px;font-size:11px;text-align:left}
+  td{padding:8px;font-size:12px;border-bottom:1px solid #eee}
+
+  /* ── Connect / Setup screen ── */
+  #setup{max-width:340px;margin:50px auto;text-align:center;padding:0 16px}
+  #setup .logo{font-size:44px}
+  #setup h2{color:#1a237e;margin:6px 0 2px}
+  #setup .sub2{color:#757575;font-size:13px;margin-bottom:20px}
+  #setup label{display:block;text-align:left;font-size:12px;color:#555;margin:12px 0 4px}
+  #setup input{font-size:16px;padding:10px;width:100%;border:2px solid #c5cae9;border-radius:8px}
+  #setup button{margin-top:18px;padding:12px;width:100%;background:#1a237e;color:#fff;border:none;
+                border-radius:8px;font-size:15px;font-weight:bold}
+  #setup .hint{font-size:11px;color:#999;margin-top:10px;text-align:left;line-height:1.5}
+  #err{color:#c62828;font-size:12px;margin-top:10px;min-height:16px}
+  #loading{text-align:center;padding:60px 16px;color:#757575}
+</style>
+</head>
+<body>
+
+<!-- ══════ Setup screen (first launch, or "Change Server") ══════ -->
+<div id="setup">
+  <div class="logo">⚡</div>
+  <h2>Bilnova AI</h2>
+  <div class="sub2">Apni dukaan ke PC se judo</div>
+
+  <label>PC ka Local IP + Port (jaise 192.168.1.5:8899)</label>
+  <input id="server" type="text" placeholder="192.168.1.5:8899" autocapitalize="off" autocorrect="off">
+
+  <label>PIN (Settings mein set kiya tha, agar kiya ho)</label>
+  <input id="pin" type="password" inputmode="numeric" placeholder="1234 (optional)">
+
+  <button onclick="connect()">Judo (Connect)</button>
+  <div id="err"></div>
+
+  <div class="hint">
+    💡 Ye address dukaan ke PC pe Bilnova AI mein <b>Help → Mobile Dashboard</b>
+    kholne par milta hai. Phone <b>usi WiFi</b> se juda hona chahiye
+    jis WiFi se PC juda hai.
+  </div>
+</div>
+
+<!-- ══════ Dashboard (after connect) ══════ -->
+<div id="dashPage" style="display:none">
+  <header>
+    <img src="icons/icon-192.png" alt="">
+    <h1>Bilnova AI</h1>
+    <button onclick="changeServer()">Server Badlo</button>
+  </header>
+  <div class="wrap">
+    <div class="sub" id="asof">Loading...</div>
+    <div class="grid">
+      <div class="card"><div class="lbl">Today's Sale</div><div class="val green" id="s_sale">—</div></div>
+      <div class="card"><div class="lbl">Today's Purchase</div><div class="val blue" id="s_purch">—</div></div>
+      <div class="card"><div class="lbl">Outstanding</div><div class="val orange" id="s_out">—</div></div>
+      <div class="card"><div class="lbl">Stock Value</div><div class="val" id="s_stock">—</div></div>
+      <div class="card"><div class="lbl">Total Items</div><div class="val" id="s_items">—</div></div>
+      <div class="card"><div class="lbl">Total Parties</div><div class="val" id="s_parties">—</div></div>
+    </div>
+    <table><thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Amount</th></tr></thead>
+    <tbody id="recent"></tbody></table>
+  </div>
+</div>
+
+<script>
+// NEW 13-Sep-2026 (Rakesh — confirmed requested: "Play Store pe nahi,
+// direct client ko di jaaye" — ye PWA shell KISI EK PC ke IP se bandhi
+// nahi hai. Har phone apna server-address khud "Connect" screen mein
+// daalta hai [localStorage mein save hota hai], isliye EK HI APK sab
+// clients ko de sakte ho — bas har ek apne shop ka IP:port daalega.
+const SERVER_KEY = 'bilnova_server';
+const PIN_KEY = 'bilnova_pin_v2';
+
+function normalizeServer(v){
+  v = v.trim();
+  if(!v) return '';
+  if(!/^https?:\/\//i.test(v)) v = 'http://' + v;
+  return v.replace(/\/+$/,'');
+}
+
+function connect(){
+  const server = normalizeServer(document.getElementById('server').value);
+  const pin = document.getElementById('pin').value;
+  if(!server){ document.getElementById('err').innerText = 'PC ka address daalo.'; return; }
+  document.getElementById('err').innerText = 'Judne ki koshish ho rahi hai...';
+  fetch(server + '/api/summary?pin=' + encodeURIComponent(pin), {mode:'cors'})
+    .then(r => {
+      if(r.status === 403){ document.getElementById('err').innerText = 'Galat PIN.'; return null; }
+      if(!r.ok) throw new Error('Server jawab nahi de raha');
+      return r.json();
+    })
+    .then(d => {
+      if(!d) return;
+      localStorage.setItem(SERVER_KEY, server);
+      localStorage.setItem(PIN_KEY, pin);
+      showDashboard();
+    })
+    .catch(ex => {
+      document.getElementById('err').innerText =
+        'Connect nahi ho paya — check karo: (1) PC pe Bilnova AI khula '
+        + 'hai aur Mobile Dashboard chalu hai, (2) phone usi WiFi pe hai, '
+        + '(3) address sahi hai.';
+    });
+}
+
+function changeServer(){
+  document.getElementById('dashPage').style.display = 'none';
+  document.getElementById('setup').style.display = 'block';
+  document.getElementById('server').value = localStorage.getItem(SERVER_KEY) || '';
+}
+
+function fmt(n){ return '₹' + Number(n).toLocaleString('en-IN', {maximumFractionDigits:0}); }
+
+function refresh(){
+  const server = localStorage.getItem(SERVER_KEY);
+  const pin = localStorage.getItem(PIN_KEY) || '';
+  if(!server) return;
+  fetch(server + '/api/summary?pin=' + encodeURIComponent(pin)).then(r=>r.json()).then(d=>{
+    document.getElementById('s_sale').innerText = fmt(d.today_sale);
+    document.getElementById('s_purch').innerText = fmt(d.today_purchase);
+    document.getElementById('s_out').innerText = fmt(d.outstanding);
+    document.getElementById('s_stock').innerText = fmt(d.stock_value);
+    document.getElementById('s_items').innerText = d.items;
+    document.getElementById('s_parties').innerText = d.parties;
+    document.getElementById('asof').innerText = 'Last updated: ' + d.as_of;
+  }).catch(()=>{ document.getElementById('asof').innerText = '⚠️ Connect nahi ho pa raha — PC/WiFi check karo.'; });
+  fetch(server + '/api/recent?pin=' + encodeURIComponent(pin)).then(r=>r.json()).then(rows=>{
+    document.getElementById('recent').innerHTML = rows.map(r =>
+      `<tr><td>${r.date}</td><td>${r.type}</td><td>${r.party}</td><td>${fmt(r.amount)}</td></tr>`
+    ).join('');
+  }).catch(()=>{});
+}
+
+function showDashboard(){
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('dashPage').style.display = 'block';
+  refresh();
+  setInterval(refresh, 30000);
+}
+
+// App khulte hi — agar pehle se koi server saved hai to seedha dashboard
+const savedServer = localStorage.getItem(SERVER_KEY);
+if(savedServer){ showDashboard(); }
+
+// Service worker register (installability ke liye zaroori)
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
