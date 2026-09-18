@@ -1,1 +1,1 @@
-{"version": "1.0.3", "download_url": "https://github.com/cptcdirector/BilnovaAI/releases/download/v1.0.3/GSTPRO_v1.0.3.zip", "notes": "Background auto-update (Restart Now), Full Help-search coverage, SSL cert fix"}
+{"version": "1.0.4", "download_url": "https://github.com/cptcdirector/BilnovaAI/releases/download/v1.0.4/GSTPRO_v1.0.4.zip", "notes": "GSTR-1 JSON complete fix, Journal Entry crash fix, Capital/Profit drill-down, GSTIN reuse fix"}
